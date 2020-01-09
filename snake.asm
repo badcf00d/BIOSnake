@@ -7,16 +7,26 @@
 
 bits 16 
 org 0x7c00 
+cpu 8086                    ; only 8086 instructions are supported in BIOS
 
 blockWidth: equ 10
 
-oldTime: dw 0x0000
-startx: dw 0x0000
-starty: dw 0x0000
 
+; within data segment 0xa0000 - 0xaffff:
+;
+;   0x0000 - 0xf9ff is the visible screen graphics (320x200 = 0xfa00 = 64000 bytes)
+;   0xfa00 - fxffff is free real estate (1535 bytes)
 
-    mov ax, 0x0012          ; 00 = set video mode, 12 = 640x480 16 color graphics
+xCord: equ 0xfa00
+yCord: equ 0xfa02
+oldTime: equ 0xfa04
+
+    mov ax, 0x0013          ; 00 = set video mode, 13 = 320x200 8-bit colour
     int 0x10                ; call bios video services
+
+    mov ax, 0xa000
+    mov ds, ax              ; goes to data segment 0xa0000
+    mov es, ax              ; goes to 
     
     mov cx, 20              ; start x
     mov dx, 40              ; start y
@@ -59,10 +69,17 @@ drawBlockLoop:
 delayUntilTick:
     mov ah,0x00             ; reads system tick counter (~18 Hz) into cx and dx
     int 0x1a                ; Call real time clock BIOS Services
-    cmp dx, [old_time]       ; Wait for change
-    je in22
-    mov [old_time], dx       ; Save new current time
+    shr dx, 3               ; divide by 8 = ~2Hz
+    cmp dx, [oldTime]       ; Wait for change
+    je delayUntilTick
+    mov [oldTime], dx       ; Save new current time
 
+    mov ah, 0x00            ; waits for a keypress
+    int 0x16                ; calls bios keyboard services
+
+    mov ax, 0x0002          ; set video mode to 80x25 text
+    int 0x10                ; calls bios video services
+    
     hlt        
 
 times 510-($-$$) db 0

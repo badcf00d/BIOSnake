@@ -25,7 +25,7 @@ xCord: equ 0xfa00
 yCord: equ 0xfa02
 oldTime: equ 0xfa04
 currentColour: equ 0xfa06
-currentDirection: equ 0xf807
+currentDirection: equ 0xfa08
 
     mov ax, 0x0013              ; 00 = set video mode, 13 = 320x200 8-bit colour
     int 0x10                    ; call bios video services
@@ -44,12 +44,12 @@ currentDirection: equ 0xf807
     mov [currentDirection], al  ; store current direction
 
 delayUntilTick:
-    mov ah, 0x01                ; get key-press
+    mov ax, 0x0100              ; check for keypress
     int 0x16                    ; calls bios keyboard services
-    jmp setDirection 
+    jnz setDirection            ; jump if there is a key waiting
 returnSetDirection:
-    mov [0xf907], al
-    mov ah,0x00                 ; reads system tick counter (~18 Hz) into cx and dx
+
+    mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
     int 0x1a                    ; call real time clock BIOS Services
     mov cl, 1                   ; shift by 3 = divide by 8
     shr dx, cl                  ; divide by 8 = ~2Hz
@@ -67,13 +67,16 @@ returnMoveCord:
     mov di, ax                  ; sets DI to point to the current pixel ready for stosb
 
     mov al, [currentColour]
-    mov [di], al                       
+    mov [di], al                ; Write to screen
     inc byte [currentColour]
 
     jmp delayUntilTick        
 
 
+
 setDirection:
+    mov ah, 0x00                ; fetches the keystroke from the keyboard buffer
+    int 0x16                    ; call bios keyboard services
     cmp al, up
     je validKey
     cmp al, down

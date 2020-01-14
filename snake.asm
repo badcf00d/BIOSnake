@@ -57,9 +57,10 @@ length: equ 0xfa0e
     mov [currentDirection], cl  ; store current direction
     mov cl, downBodyColour      ; start at grey
     mov [currentColour], cl     ; store current colour
-    mov cl, 5                   ; start with a length of 5
+    mov cl, 10                   ; start with a length of 5
     mov [length], cl            ; store start length
     dec cl                      ; cx is the loop counter
+    call printSnakeToScreen
 initSnake:
     call moveHead
     call printSnakeToScreen     ; draw some initial chunks of the snake
@@ -72,7 +73,7 @@ initSnake:
 delayUntilTick:
     mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
     int 0x1a                    ; call real time clock BIOS Services
-    mov cl, 2                   ; shift by 2 = divide by 4
+    mov cl, 1                   ; shift by 2 = divide by 4
     shr dx, cl                  ; divide by 4 = ~4Hz
     cmp dx, [oldTime]           ; Wait for change
     je delayUntilTick
@@ -86,6 +87,7 @@ returnSetDirection:
     call moveHead
     mov [currentColour], al     ; store current colour
     mov [di], al
+    call setDiToHead
     call eraseSnakeTail
     call printSnakeToScreen
     call drawFood
@@ -120,24 +122,24 @@ drawFood:
     xor bx, cx                  
     xor bx, dx                  
     xor bx, 0xd39e              ; Now bx should be a pretty random number
-    cmp bx, 64000
-    ja drawFood
+    cmp bx, 63999
+    ja skipDrawFood
 
     mov ax, di                  ; make a backup of DI
     mov di, bx                  ; set DI to our random number
     cmp byte [di], 0            ; check if that pixel has already been drawn to
-    jne jumpToReturn
+    jne skipDrawFood
 
-    mov bl, foodColour          ; light blue
-    mov [di], bl                ; draw to the screen
+    mov cl, foodColour          ; light blue
+    mov [di], cl                ; draw to the screen
     mov di, ax                  ; restore the backup of DI
+skipDrawFood:
     ret 
     
     
 
 
 eraseSnakeTail:
-    ; this won't work, di is still pointing at our last block, not the food
     cmp byte [di], foodColour
     je jumpToReturn             ; if we just ate food, don't erase the tail
     call setSiToTail
@@ -154,9 +156,10 @@ eraseSnakeTail:
     cmp byte [si], rightBodyColour
     je moveTailRight
 returnSnakeTail:
-    mov al, 14                   ; black
+    mov al, 0                   ; black
     mov [si], al                ; write to screen
     ret
+
 
 setSiToTail:
     mov ax, [tailY]

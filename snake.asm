@@ -119,21 +119,21 @@ drawFood:
     mov bx, cx
     mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
     int 0x1a                    ; call real time clock BIOS Services
-    xor bx, cx                  
-    xor bx, dx                  
-    xor bx, 0xd39e              ; Now bx should be a pretty random number
-    cmp bx, 63999
-    ja skipDrawFood
+    xor ax, cx                  
+    xor ax, dx                  
+    xor ax, 0xd39e              
+retryDrawFood:
+    xor ax, bx                  ; now AX should be a pretty random number
+    mov bx, 63999               ; dividing here to make sure we're actually on the screen
+    div bx                      ; divides AX by BX, puts remainder in DX
 
-    mov ax, di                  ; make a backup of DI
-    mov di, bx                  ; set DI to our random number
+    mov di, dx                  ; take the remainder of our division and put it in DI
     cmp byte [di], 0            ; check if that pixel has already been drawn to
-    jne skipDrawFood
+    jne retryDrawFood           ; try scramble the numbers again
 
     mov cl, foodColour          ; light blue
     mov [di], cl                ; draw to the screen
-    mov di, ax                  ; restore the backup of DI
-skipDrawFood:
+    call setDiToHead            ; set DI back to where it should be
     ret 
     
     
@@ -141,18 +141,15 @@ skipDrawFood:
 
 eraseSnakeTail:
     cmp byte [di], foodColour
-    je jumpToReturn             ; if we just ate food, don't erase the tail
+    ret                         ; if we just ate food, don't erase the tail
     call setSiToTail
 
     cmp byte [si], upBodyColour
     je moveTailUp
-
     cmp byte [si], downBodyColour
     je moveTailDown
-
     cmp byte [si], leftBodyColour
     je moveTailLeft
-
     cmp byte [si], rightBodyColour
     je moveTailRight
 returnSnakeTail:
@@ -254,10 +251,6 @@ moveTailLeft:
 moveTailRight:
     inc word [tailX]
     jmp returnSnakeTail
-
-
-jumpToReturn:
-    ret
 
 
 gameOverManGameOver:

@@ -5,8 +5,14 @@
 ;   qemu-system-x86_64 -hda snake.img
 ;
 
-bits 16 
-org 0x7c00 
+; if you want to assemble this into anything other than a raw binary, comment this out
+%define bios_file
+
+%ifdef bios_file
+org 0x7c00
+%endif
+
+bits 16
 cpu 8086                    ; only 8086 instructions are supported in BIOS
 
 blockWidth: equ 10
@@ -48,19 +54,19 @@ length: equ 0xfa0e
 
     mov cx, 20                  ; start x
     mov [headX], cl             ; store start x
-    mov [tailX], cl
+    mov [tailX], cl             ; store tail x
     mov cl, 40                  ; start y
     mov [headY], cl             ; store start y
-    mov [tailY], cl
+    mov [tailY], cl             ; store tail y
 
     mov cl, down                ; start going down
     mov [currentDirection], cl  ; store current direction
     mov cl, downBodyColour      ; start at grey
     mov [currentColour], cl     ; store current colour
-    mov cl, 10                   ; start with a length of 5
+    mov cl, 10                  ; start with a length of 10
     mov [length], cl            ; store start length
     dec cl                      ; cx is the loop counter
-    call printSnakeToScreen
+    call printSnakeToScreen     ; draw a block at the initial position
 initSnake:
     call moveHead
     call printSnakeToScreen     ; draw some initial chunks of the snake
@@ -75,8 +81,8 @@ delayUntilTick:
     int 0x1a                    ; call real time clock BIOS Services
     mov cl, 1                   ; shift by 2 = divide by 4
     shr dx, cl                  ; divide by 4 = ~4Hz
-    cmp dx, [oldTime]           ; Wait for change
-    je delayUntilTick
+    cmp dx, [oldTime]           ; wait for change
+    je delayUntilTick           ; jump back up if the time is still the same
     mov [oldTime], dx           ; Save new current time
 
     mov ax, 0x0100              ; check for keypress
@@ -86,12 +92,12 @@ returnSetDirection:
 
     call moveHead
     mov [currentColour], al     ; store current colour
-    mov [di], al
+    mov [di], al                ; draw over the old block with the new colour
     call setDiToHead
     call eraseSnakeTail
     call printSnakeToScreen
     call drawFood
-    jmp delayUntilTick        
+    jmp delayUntilTick          ; loop forever
 
 
 
@@ -115,13 +121,13 @@ printSnakeToScreen:
 drawFood:
     mov ah, 0x02                ; reads time from RTC
     int 0x1a                    ; call real time clock BIOS Services
-    xor cx, dx
-    mov bx, cx
+    xor cx, dx                  ; xor the low and high bytes of the time
+    mov bx, cx                  ; copy this to the bx register
     mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
     int 0x1a                    ; call real time clock BIOS Services
-    xor ax, cx                  
-    xor ax, dx                  
-    xor ax, 0xd39e              
+    xor ax, cx                  ; xor with high word of system tick count
+    xor ax, dx                  ; xor with low word of system tick count
+    xor ax, 0xd39e              ; xor with a random number
 retryDrawFood:
     xor ax, bx                  ; now AX should be a pretty random number
     mov bx, 63999               ; dividing here to make sure we're actually on the screen
@@ -131,7 +137,7 @@ retryDrawFood:
     cmp byte [di], 0            ; check if that pixel has already been drawn to
     jne retryDrawFood           ; try scramble the numbers again
 
-    mov cl, foodColour          ; light blue
+    mov cl, foodColour
     mov [di], cl                ; draw to the screen
     call setDiToHead            ; set DI back to where it should be
     ret 
@@ -140,8 +146,8 @@ retryDrawFood:
 
 
 eraseSnakeTail:
-    cmp byte [di], foodColour
-    je jumpToReturn                         ; if we just ate food, don't erase the tail
+    cmp byte [di], foodColour   ; is the head on a piece of food?
+    je jumpToReturn             ; if we're about to eat food, don't erase the tail
     call setSiToTail
 
     cmp byte [si], upBodyColour
@@ -162,7 +168,7 @@ setSiToTail:
     mov ax, [tailY]
     mov dx, screenWidth         ; equal to the number of pixels per row
     mul dx                      ; multiplies AX and DX to get to tailY in screen memory
-    add ax, [tailX]             ; moves along the row to get to headX in screen memory
+    add ax, [tailX]             ; moves along the row to get to tailX in screen memory
     mov si, ax                  ; sets SI to point to the current pixel
     ret
 
@@ -191,20 +197,22 @@ setDirection:
     jmp returnSetDirection      ; if we get here, it was an invalid key, don't save it
 
 validKey:
+; we can stop the snake from going back into itself by doing this check
+;
 ; up:    0111 0111  (w)
 ; down:  0111 0011  (s)
 ; left:  0110 0001  (a)
 ; right: 0110 0100  (d)
 ;   if (al AND 0001 0000) XOR (currentDirection AND 0001 0000) is zero, ignore the key
 
-    mov ah, al
+    mov ah, al                  ; AL contains the key that was pressed
     mov bl, [currentDirection]
     and ah, 0b0001_0000
     and bl, 0b0001_0000
     xor ah, bl
-    jz returnSetDirection
+    jz returnSetDirection       ; ignore the key
 
-    mov [currentDirection], al
+    mov [currentDirection], al  ; store the new direction
     jmp returnSetDirection
 
 
@@ -254,8 +262,8 @@ moveTailRight:
 
 
 jumpToReturn:
-    ret
-    
+    ret                         ; useful if you need to do a conditional return
+
 
 gameOverManGameOver:
     mov al, 12                  ; red

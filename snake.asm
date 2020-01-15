@@ -141,7 +141,7 @@ retryDrawFood:
 
 eraseSnakeTail:
     cmp byte [di], foodColour
-    ret                         ; if we just ate food, don't erase the tail
+    je jumpToReturn                         ; if we just ate food, don't erase the tail
     call setSiToTail
 
     cmp byte [si], upBodyColour
@@ -252,6 +252,10 @@ moveTailRight:
     inc word [tailX]
     jmp returnSnakeTail
 
+
+jumpToReturn:
+    ret
+    
 
 gameOverManGameOver:
     mov al, 12                  ; red

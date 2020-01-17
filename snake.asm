@@ -17,6 +17,7 @@ cpu 8086                    ; only 8086 instructions are supported in BIOS
 
 blockWidth: equ 10
 screenWidth: equ 320
+screenHeight: equ 200
 up: equ 0x77                ; w
 down: equ 0x73              ; s
 left: equ 0x61              ; a
@@ -24,10 +25,10 @@ right: equ 0x64             ; d
 
 foodColour: equ 9           ; light blue
 tailColour: equ 5           ; magenta
-upBodyColour: equ 10        ; light green
-downBodyColour: equ 11      ; light cyan
-leftBodyColour: equ 12      ; light red
-rightBodyColour: equ 13     ; light magenta
+upBodyColour: equ 31        ; white
+downBodyColour: equ 30      ; slightly less white
+leftBodyColour: equ 29      ; slightly more less white
+rightBodyColour: equ 28     ; even more less white
 
 ; within data segment 0xa0000 - 0xaffff:
 ;
@@ -232,15 +233,26 @@ moveHead:
 
 moveHeadUp:
     mov al, upBodyColour
+    cmp word [headY], 0
     dec word [headY]
+    jnz jumpToReturn
+    mov bx, screenHeight
+    mov [headY], bx
     ret
 moveHeadDown:
     mov al, downBodyColour
     inc word [headY]
+    cmp word [headY], screenHeight
+    jne jumpToReturn
+    mov bx, 0
+    mov [headY], bx
     ret
 moveHeadLeft:
     mov al, leftBodyColour
     dec word [headX]
+    jnz jumpToReturn
+    mov bx, screenHeight
+    mov [headY], bx
     ret
 moveHeadRight:
     mov al, rightBodyColour

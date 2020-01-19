@@ -12,8 +12,8 @@
 org 0x7c00
 %endif
 
-bits 16
-cpu 8086                    ; only 8086 instructions are supported in BIOS
+BITS 16
+CPU 8086                    ; only 8086 instructions are supported in BIOS
 
 blockWidth: equ 10
 screenWidth: equ 320
@@ -45,7 +45,7 @@ tailY: equ 0xfa0c
 length: equ 0xfa0e
 
 
-
+start:
     mov ax, 0x0013              ; 00 = set video mode, 13 = 320x200 8-bit colour
     int 0x10                    ; call bios video services
 
@@ -64,9 +64,7 @@ length: equ 0xfa0e
     mov [currentDirection], cl  ; store current direction
     mov cl, downBodyColour      ; start at grey
     mov [currentColour], cl     ; store current colour
-    mov cl, 10                  ; start with a length of 10
-    mov [length], cl            ; store start length
-    dec cl                      ; cx is the loop counter
+    mov cl, 9                   ; cx is the loop counter
     call printSnakeToScreen     ; draw a block at the initial position
 initSnake:
     call moveHead
@@ -80,13 +78,12 @@ initSnake:
 delayUntilTick:
     mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
     int 0x1a                    ; call real time clock BIOS Services
-    mov cl, 1                   ; shift by 2 = divide by 4
-    shr dx, cl                  ; divide by 4 = ~4Hz
+    shr dx, 1                   ; divide by 2 = ~9Hz
     cmp dx, [oldTime]           ; wait for change
     je delayUntilTick           ; jump back up if the time is still the same
     mov [oldTime], dx           ; Save new current time
 
-    mov ax, 0x0100              ; check for keypress
+    mov ah, 0x01                ; check for keypress
     int 0x16                    ; calls bios keyboard services
     jnz setDirection            ; jump if there is a key waiting
 returnSetDirection:
@@ -99,87 +96,6 @@ returnSetDirection:
     call printSnakeToScreen
     call drawFood
     jmp delayUntilTick          ; loop forever
-
-
-
-
-printSnakeToScreen:
-    call setDiToHead
-    cmp byte [di], upBodyColour
-    je gameOverManGameOver
-    cmp byte [di], downBodyColour
-    je gameOverManGameOver
-    cmp byte [di], leftBodyColour
-    je gameOverManGameOver
-    cmp byte [di], rightBodyColour
-    je gameOverManGameOver
-    mov al, [currentColour]
-    mov [di], al                ; write to screen
-    ret
-
-
-
-drawFood:
-    mov ah, 0x02                ; reads time from RTC
-    int 0x1a                    ; call real time clock BIOS Services
-    xor cx, dx                  ; xor the low and high bytes of the time
-    mov bx, cx                  ; copy this to the bx register
-    mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
-    int 0x1a                    ; call real time clock BIOS Services
-    xor ax, cx                  ; xor with high word of system tick count
-    xor ax, dx                  ; xor with low word of system tick count
-    xor ax, 0xd39e              ; xor with a random number
-retryDrawFood:
-    xor ax, bx                  ; now AX should be a pretty random number
-    mov bx, 63999               ; dividing here to make sure we're actually on the screen
-    div bx                      ; divides AX by BX, puts remainder in DX
-
-    mov di, dx                  ; take the remainder of our division and put it in DI
-    cmp byte [di], 0            ; check if that pixel has already been drawn to
-    jne retryDrawFood           ; try scramble the numbers again
-
-    mov cl, foodColour
-    mov [di], cl                ; draw to the screen
-    call setDiToHead            ; set DI back to where it should be
-    ret 
-    
-    
-
-
-eraseSnakeTail:
-    cmp byte [di], foodColour   ; is the head on a piece of food?
-    je jumpToReturn             ; if we're about to eat food, don't erase the tail
-    call setSiToTail
-
-    cmp byte [si], upBodyColour
-    je moveTailUp
-    cmp byte [si], downBodyColour
-    je moveTailDown
-    cmp byte [si], leftBodyColour
-    je moveTailLeft
-    cmp byte [si], rightBodyColour
-    je moveTailRight
-returnSnakeTail:
-    mov al, 0                   ; black
-    mov [si], al                ; write to screen
-    ret
-
-
-setSiToTail:
-    mov ax, [tailY]
-    mov dx, screenWidth         ; equal to the number of pixels per row
-    mul dx                      ; multiplies AX and DX to get to tailY in screen memory
-    add ax, [tailX]             ; moves along the row to get to tailX in screen memory
-    mov si, ax                  ; sets SI to point to the current pixel
-    ret
-
-setDiToHead:
-    mov ax, [headY]
-    mov dx, screenWidth         ; equal to the number of pixels per row
-    mul dx                      ; multiplies AX and DX to get to headY in screen memory
-    add ax, [headX]             ; moves along the row to get to headX in screen memory
-    mov di, ax                  ; sets DI to point to the current pixel
-    ret
 
 
 
@@ -218,63 +134,21 @@ validKey:
 
 
 
-moveHead:
-    cmp byte [currentDirection], up
-    je moveHeadUp
-    cmp byte [currentDirection], down
-    je moveHeadDown
-    cmp byte [currentDirection], left
-    je moveHeadLeft
-    cmp byte [currentDirection], right
-    je moveHeadRight    
-
-
-
-
-moveHeadUp:
-    mov al, upBodyColour
-    cmp word [headY], 0
-    dec word [headY]
-    jnz jumpToReturn
-    mov bx, screenHeight
-    mov [headY], bx
+printSnakeToScreen:
+    call setDiToHead
+    xor ax, ax
+    mov al, [di]
+    sub al, rightBodyColour     ; rightBodyColour is the lowest number
+    jz gameOverManGameOver
+    dec ax
+    jz gameOverManGameOver
+    dec ax
+    jz gameOverManGameOver
+    dec ax
+    jz gameOverManGameOver
+    mov al, [currentColour]
+    mov [di], al                ; write to screen
     ret
-moveHeadDown:
-    mov al, downBodyColour
-    inc word [headY]
-    cmp word [headY], screenHeight
-    jne jumpToReturn
-    mov bx, 0
-    mov [headY], bx
-    ret
-moveHeadLeft:
-    mov al, leftBodyColour
-    dec word [headX]
-    jnz jumpToReturn
-    mov bx, screenHeight
-    mov [headY], bx
-    ret
-moveHeadRight:
-    mov al, rightBodyColour
-    inc word [headX]
-    ret
-
-moveTailUp:
-    dec word [tailY]
-    jmp returnSnakeTail
-moveTailDown:
-    inc word [tailY]
-    jmp returnSnakeTail
-moveTailLeft:
-    dec word [tailX]
-    jmp returnSnakeTail
-moveTailRight:
-    inc word [tailX]
-    jmp returnSnakeTail
-
-
-jumpToReturn:
-    ret                         ; useful if you need to do a conditional return
 
 
 gameOverManGameOver:
@@ -283,5 +157,159 @@ gameOverManGameOver:
     jmp $                       ; loop forever
 
 
+drawFood:
+    mov ah, 0x02                ; reads time from RTC
+    int 0x1a                    ; call real time clock BIOS Services
+    xor cx, dx                  ; xor the low and high bytes of the time
+    mov bx, cx                  ; copy this to the bx register
+    mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
+    int 0x1a                    ; call real time clock BIOS Services
+    xor ax, cx                  ; xor with high word of system tick count
+    xor ax, dx                  ; xor with low word of system tick count
+    xor ax, 0xd39e              ; xor with a random number
+retryDrawFood:
+    xor ax, bx                  ; now AX should be a pretty random number
+    mov bx, 63999               ; dividing here to make sure we're actually on the screen
+    div bx                      ; divides AX by BX, puts remainder in DX
+
+    mov di, dx                  ; take the remainder of our division and put it in DI
+    cmp byte [di], 0            ; check if that pixel has already been drawn to
+    jne retryDrawFood           ; try scramble the numbers again
+
+    mov cl, foodColour
+    mov [di], cl                ; draw to the screen
+    call setDiToHead            ; set DI back to where it should be
+    ret 
+    
+    
+
+
+eraseSnakeTail:
+    cmp byte [di], foodColour   ; is the head on a piece of food?
+    je jumpToReturn             ; if we're about to eat food, don't erase the tail
+    call setSiToTail
+    mov bx, [tailX]             ; load the tail X in bx (needs 16 bits)
+    mov dl, [tailY]             ; load the tail Y in dl (only needs 8 bits)
+
+    xor ax, ax
+    mov al, [si]
+    sub al, rightBodyColour     ; rightBodyColour is the lowest number
+    jz moveTailRight
+    dec ax
+    jz moveTailLeft
+    dec ax
+    jz moveTailDown
+    dec ax
+    jz moveTailUp
+returnSnakeTail:
+    mov al, 0                   ; black
+    mov [si], al                ; write to screen
+    ret
+
+saveTailMove:
+    mov [tailX], bx             ; store the new tail X
+    mov [tailY], dl             ; store the new tail Y
+    jmp returnSnakeTail
+
+moveTailUp:
+    sub dl, 1
+    jnc saveTailMove
+    mov dl, screenHeight - 1
+    jmp saveTailMove
+
+moveTailDown:
+    inc dx                      ; saves a byte by incrementing the whole register
+    cmp dl, screenHeight + 1
+    jne saveTailMove
+    mov dl, 0
+    jmp saveTailMove
+
+moveTailLeft:
+    sub bx, 1
+    jnc saveTailMove
+    mov bx, screenWidth - 1
+    jmp saveTailMove
+
+moveTailRight:
+    inc bx
+    cmp bx, screenWidth + 1
+    jne saveTailMove
+    xor bx, bx
+    jmp saveTailMove
+
+
+
+moveHead:
+    mov bx, [headX]             ; load the head X in bx (needs 16 bits)
+    mov dl, [headY]             ; load the head Y in dl (only needs 8 bits)
+    mov al, [currentDirection]
+    cmp al, up
+    je moveHeadUp
+    cmp al, down
+    je moveHeadDown
+    cmp al, left
+    je moveHeadLeft
+    cmp al, right
+    je moveHeadRight
+
+saveHeadMove:
+    mov [headX], bx             ; store the new head X
+    mov [headY], dl             ; store the new head Y
+    ret
+
+
+
+moveHeadUp:
+    mov al, upBodyColour
+    sub dl, 1
+    jnc saveHeadMove
+    mov dl, screenHeight - 1
+    jmp saveHeadMove
+
+moveHeadDown:
+    mov al, downBodyColour
+    inc dx                      ; saves a byte by incrementing the whole register
+    cmp dl, screenHeight + 1
+    jne saveHeadMove
+    mov dl, 0
+    jmp saveHeadMove
+
+moveHeadLeft:
+    mov al, leftBodyColour
+    sub bx, 1
+    jnc saveHeadMove
+    mov bx, screenWidth - 1
+    jmp saveHeadMove
+
+moveHeadRight:
+    mov al, rightBodyColour
+    inc bx
+    cmp bx, screenWidth + 1
+    jne saveHeadMove
+    xor bx, bx
+    jmp saveHeadMove
+
+
+
+setSiToTail:
+    mov ax, [tailY]
+    mov dx, screenWidth         ; equal to the number of pixels per row
+    mul dx                      ; multiplies AX and DX to get to tailY in screen memory
+    add ax, [tailX]             ; moves along the row to get to tailX in screen memory
+    mov si, ax                  ; sets SI to point to the current pixel
+    ret
+
+setDiToHead:
+    mov ax, [headY]
+    mov dx, screenWidth         ; equal to the number of pixels per row
+    mul dx                      ; multiplies AX and DX to get to headY in screen memory
+    add ax, [headX]             ; moves along the row to get to headX in screen memory
+    mov di, ax                  ; sets DI to point to the current pixel
+jumpToReturn:
+    ret                         ; useful if you need to do a conditional return
+
+
+
+
 times 510-($-$$) db 0
-dw 0xaa55
+dw 0xaa55                       ; x86 is little endian, so this is actually 0x55, 0xaa

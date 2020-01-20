@@ -162,33 +162,43 @@ printSnakeToScreen:
 gameOverManGameOver:
     mov ax, 0x0003              ; 00 = set video mode, 03 = 80x25 8-bit colour text
     int 0x10                    ; call bios video services
+
+
+    xor dx, dx
+    mov es, dx
+    mov ax, 0x1301              ; write string mode for bios video services, write mode 1, increment cursor & attributes in BL
+    mov bl, 7                   ; BIOS color attributes, 7 is light gray, low nibble is forground, high is background
+    mov dx, 0x0A0A              ; row, column
+    mov bp, endMessage          ; base pointer to string
+    mov cx, endMessageLen       ; length of string
+    int 0x10                    ; call bios video services
+
+    add dx, endMessageLen + 10
     mov ah, 0x02
-    mov dx, 0x0a0a
     int 0x10
 
+    mov bx, 100
+
 writeScore:
-    mov di, [scoreEnd]
-    mov ax, [length]
     xor dx, dx
-    mov bx, 10
-    div bx
-    mov [di], dl
-    dec cx
-    cmp ax, 0
-    jnz writeScore
+    mov ax, bx
+    mov cx, 10
+    div cx
+    mov bx, ax
+    mov al, dl
+    add al, 0x30                ; 0x30 = "0"
 
-    xor bx, bx
-    mov ds, bx
+    mov ah, 0x03
+    int 0x10
+    dec dl
     mov ah, 0x0e
-    mov si, endMessage
-    mov bl, endMessageLen
-    mov bh, 0
+    int 0x10
 
-printChar:
-    lodsb
-    int 0x10            
-    dec bl
-    jnz printChar    
+    mov ah, 0x02
+    int 0x10
+
+    cmp bx, 0
+    jnz writeScore
 
     jmp $                       ; loop here forever
 
@@ -196,15 +206,10 @@ printChar:
 drawFood:
     mov ah, 0x02                ; reads time from RTC
     int 0x1a                    ; call real time clock BIOS Services
-    xor cx, dx                  ; xor the low and high bytes of the time
-    mov bx, cx                  ; copy this to the bx register
-    mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
-    int 0x1a                    ; call real time clock BIOS Services
-    xor ax, cx                  ; xor with high word of system tick count
-    xor ax, dx                  ; xor with low word of system tick count
+    xor ax, dx                  ; xor the low and high bytes of the time
+    xor ax, cx
     xor ax, 0xd39e              ; xor with a random number
 retryDrawFood:
-    xor ax, bx                  ; now AX should be a pretty random number
     mov bx, 63999               ; dividing here to make sure we're actually on the screen
     div bx                      ; divides AX by BX, puts remainder in DX
 
@@ -225,8 +230,14 @@ ateFood:
 eraseSnakeTail:
     cmp byte [di], foodColour   ; is the head on a piece of food?
     je ateFood                  ; if we're about to eat food, don't erase the tail
-    call setSiToTail
-    mov bx, [tailX]             ; load the tail X in bx (needs 16 bits)
+
+    mov ax, [tailY]
+    mov bx, [tailX]
+    mov cx, screenWidth         ; equal to the number of pixels per row
+    mul cx                      ; multiplies AX and DX to get to tailY in screen memory
+    add ax, bx                  ; moves along the row to get to tailX in screen memory
+    mov si, ax                  ; sets SI to point to the current pixel
+
     mov dl, [tailY]             ; load the tail Y in dl (only needs 8 bits)
 
     xor ax, ax
@@ -328,15 +339,6 @@ moveHeadRight:
     jmp saveHeadMove
 
 
-
-setSiToTail:
-    mov ax, [tailY]
-    mov dx, screenWidth         ; equal to the number of pixels per row
-    mul dx                      ; multiplies AX and DX to get to tailY in screen memory
-    add ax, [tailX]             ; moves along the row to get to tailX in screen memory
-    mov si, ax                  ; sets SI to point to the current pixel
-    ret
-
 setDiToHead:
     mov ax, [headY]
     mov dx, screenWidth         ; equal to the number of pixels per row
@@ -347,9 +349,7 @@ setDiToHead:
 
 
 
-endMessage: db "e: "
-times 5 db 0
-scoreEnd: equ $
+endMessage: db "Score: "
 endMessageLen: equ $ - endMessage
 times 510-($-$$) db 0
 dw 0xaa55                       ; x86 is little endian, so this is actually 0x55, 0xaa

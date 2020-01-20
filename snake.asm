@@ -29,7 +29,7 @@ upBodyColour: equ 31        ; white
 downBodyColour: equ 30      ; slightly less white
 leftBodyColour: equ 29      ; slightly more less white
 rightBodyColour: equ 28     ; even more less white
-
+initialLength: equ 10
 ; within data segment 0xa0000 - 0xaffff:
 ;
 ;   0x0000 - 0xf9ff is the visible screen graphics (320x200 = 0xfa00 = 64000 bytes)
@@ -64,7 +64,7 @@ start:
     mov [currentDirection], cl  ; store current direction
     mov cl, downBodyColour      ; start at grey
     mov [currentColour], cl     ; store current colour
-    mov cl, 10                  ; cx is the loop counter
+    mov cl, initialLength       ; cx is the loop counter
     mov [length], cx
     dec cx
     call printSnakeToScreen     ; draw a block at the initial position
@@ -73,6 +73,7 @@ initSnake:
     call printSnakeToScreen     ; draw some initial chunks of the snake
     loop initSnake              ; cx is the loop counter
     call drawFood
+    call writeScore
     
 
 
@@ -160,46 +161,8 @@ printSnakeToScreen:
 
 
 gameOverManGameOver:
-    mov ax, 0x0003              ; 00 = set video mode, 03 = 80x25 8-bit colour text
-    int 0x10                    ; call bios video services
-
-
-    xor dx, dx
-    mov es, dx
-    mov ax, 0x1301              ; write string mode for bios video services, write mode 1, increment cursor & attributes in BL
-    mov bl, 7                   ; BIOS color attributes, 7 is light gray, low nibble is forground, high is background
-    mov dx, 0x0A0A              ; row, column
-    mov bp, endMessage          ; base pointer to string
-    mov cx, endMessageLen       ; length of string
-    int 0x10                    ; call bios video services
-
-    add dx, endMessageLen + 10
-    mov ah, 0x02
-    int 0x10
-
-    mov bx, 100
-
-writeScore:
-    xor dx, dx
-    mov ax, bx
-    mov cx, 10
-    div cx
-    mov bx, ax
-    mov al, dl
-    add al, 0x30                ; 0x30 = "0"
-
-    mov ah, 0x03
-    int 0x10
-    dec dl
-    mov ah, 0x0e
-    int 0x10
-
-    mov ah, 0x02
-    int 0x10
-
-    cmp bx, 0
-    jnz writeScore
-
+    mov al, 12               ; red
+    mov [di], al                ; Write to screen
     jmp $                       ; loop here forever
 
 
@@ -222,9 +185,40 @@ retryDrawFood:
     call setDiToHead            ; set DI back to where it should be
     ret 
     
+writeScore:
+    mov bx, [length]
+    sub bx, initialLength
+    mov dx, 5
+
+
+writeScoreLoop:
+    dec dl
+    mov ah, 0x02
+    int 0x10
     
+    xor dx, dx
+    mov ax, bx
+    mov cx, 10
+    div cx
+    mov bx, ax
+    mov al, dl
+    add al, 0x30                ; 0x30 = "0"
+
+    mov ah, 0x03
+    int 0x10
+    mov cl, bl
+    mov bl, 7                   ; light grey
+    mov ah, 0x0e
+    int 0x10
+    mov bl, cl
+
+    cmp dl, 0
+    jnz writeScoreLoop
+    ret
+
 ateFood:
     inc word [length]
+    call writeScore
     ret
 
 eraseSnakeTail:
@@ -349,7 +343,5 @@ setDiToHead:
 
 
 
-endMessage: db "Score: "
-endMessageLen: equ $ - endMessage
 times 510-($-$$) db 0
 dw 0xaa55                       ; x86 is little endian, so this is actually 0x55, 0xaa

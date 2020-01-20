@@ -64,13 +64,15 @@ start:
     mov [currentDirection], cl  ; store current direction
     mov cl, downBodyColour      ; start at grey
     mov [currentColour], cl     ; store current colour
-    mov cl, 9                   ; cx is the loop counter
+    mov cl, 10                  ; cx is the loop counter
+    mov [length], cx
+    dec cx
     call printSnakeToScreen     ; draw a block at the initial position
 initSnake:
     call moveHead
     call printSnakeToScreen     ; draw some initial chunks of the snake
     loop initSnake              ; cx is the loop counter
-
+    call drawFood
     
 
 
@@ -94,6 +96,12 @@ returnSetDirection:
     call setDiToHead
     call eraseSnakeTail
     call printSnakeToScreen
+
+    mov ax, [oldTime]           ; only draw food every 100 ticks
+    mov bx, 100
+    div bx
+    cmp dx, 0
+    jne delayUntilTick
     call drawFood
     jmp delayUntilTick          ; loop forever
 
@@ -152,9 +160,37 @@ printSnakeToScreen:
 
 
 gameOverManGameOver:
-    mov al, 12                  ; red
-    mov [di], al                ; Write to screen
-    jmp $                       ; loop forever
+    mov ax, 0x0003              ; 00 = set video mode, 03 = 80x25 8-bit colour text
+    int 0x10                    ; call bios video services
+    mov ah, 0x02
+    mov dx, 0x0a0a
+    int 0x10
+
+writeScore:
+    mov di, [scoreEnd]
+    mov ax, [length]
+    xor dx, dx
+    mov bx, 10
+    div bx
+    mov [di], dl
+    dec cx
+    cmp ax, 0
+    jnz writeScore
+
+    xor bx, bx
+    mov ds, bx
+    mov ah, 0x0e
+    mov si, endMessage
+    mov bl, endMessageLen
+    mov bh, 0
+
+printChar:
+    lodsb
+    int 0x10            
+    dec bl
+    jnz printChar    
+
+    jmp $                       ; loop here forever
 
 
 drawFood:
@@ -182,11 +218,13 @@ retryDrawFood:
     ret 
     
     
-
+ateFood:
+    inc word [length]
+    ret
 
 eraseSnakeTail:
     cmp byte [di], foodColour   ; is the head on a piece of food?
-    je jumpToReturn             ; if we're about to eat food, don't erase the tail
+    je ateFood                  ; if we're about to eat food, don't erase the tail
     call setSiToTail
     mov bx, [tailX]             ; load the tail X in bx (needs 16 bits)
     mov dl, [tailY]             ; load the tail Y in dl (only needs 8 bits)
@@ -232,7 +270,7 @@ moveTailLeft:
 
 moveTailRight:
     inc bx
-    cmp bx, screenWidth + 1
+    cmp bx, screenWidth
     jne saveTailMove
     xor bx, bx
     jmp saveTailMove
@@ -284,7 +322,7 @@ moveHeadLeft:
 moveHeadRight:
     mov al, rightBodyColour
     inc bx
-    cmp bx, screenWidth + 1
+    cmp bx, screenWidth
     jne saveHeadMove
     xor bx, bx
     jmp saveHeadMove
@@ -305,11 +343,13 @@ setDiToHead:
     mul dx                      ; multiplies AX and DX to get to headY in screen memory
     add ax, [headX]             ; moves along the row to get to headX in screen memory
     mov di, ax                  ; sets DI to point to the current pixel
-jumpToReturn:
     ret                         ; useful if you need to do a conditional return
 
 
 
-
+endMessage: db "e: "
+times 5 db 0
+scoreEnd: equ $
+endMessageLen: equ $ - endMessage
 times 510-($-$$) db 0
 dw 0xaa55                       ; x86 is little endian, so this is actually 0x55, 0xaa

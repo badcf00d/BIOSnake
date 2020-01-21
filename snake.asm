@@ -312,6 +312,9 @@ moveHeadUp:
 moveHeadDown:
     mov al, downBodyColour
     inc dx                      ; saves a byte by incrementing the whole register
+
+; This is 0x1b6, we need to jump over from 0x1b8 to 0x1ce to avoid partition 1 in the MBR
+
     cmp dl, screenHeight + 1
     jne saveHeadMove
     mov dl, 0

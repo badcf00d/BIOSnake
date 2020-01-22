@@ -23,7 +23,7 @@ down: equ 0x73              ; s
 left: equ 0x61              ; a
 right: equ 0x64             ; d
 
-foodColour: equ 9           ; light blue
+foodColour: equ 12          ; red
 tailColour: equ 5           ; magenta
 upBodyColour: equ 31        ; white
 downBodyColour: equ 30      ; slightly less white
@@ -49,44 +49,42 @@ start:
     mov ax, 0x0013              ; 00 = set video mode, 13 = 320x200 8-bit colour
     int 0x10                    ; call bios video services
 
-    mov cx, 0xa000
-    mov ds, cx                  ; goes to data segment 0xa0000
-    mov es, cx                  ; goes to 0xfa00 within 0xa0000
+    mov ax, 0xa000
+    mov ds, ax                  ; goes to data segment 0xa0000
+    mov es, ax                  ; goes to 0xfa00 within 0xa0000
 
-    mov cx, 20                  ; start x
-    mov [headX], cl             ; store start x
-    mov [tailX], cl             ; store tail x
-    mov cl, 40                  ; start y
-    mov [headY], cl             ; store start y
-    mov [tailY], cl             ; store tail y
+    mov al, 20                  ; start x
+    mov [tailX], al             ; store tail x
+    mov [headX], al             ; store start x
 
-    mov cl, down                ; start going down
-    mov [currentDirection], cl  ; store current direction
-    mov cl, downBodyColour      ; start at grey
-    mov [currentColour], cl     ; store current colour
-    mov cl, initialLength       ; cx is the loop counter
+    mov al, 40                  ; start y
+    mov [tailY], al             ; store tail y
+    dec ax                      ; set head back to simplify initSnake
+    mov [headY], al             ; store start y
+
+    mov al, down                ; start going down
+    mov [currentDirection], al  ; store current direction
+    mov al, downBodyColour      ; start at grey
+    mov [currentColour], al     ; store current colour
+    mov cx, initialLength       ; cx is the loop counter
     mov [length], cx
     dec cx
-    call printSnakeToScreen     ; draw a block at the initial position
 initSnake:
     call moveHead
     call printSnakeToScreen     ; draw some initial chunks of the snake
     loop initSnake              ; cx is the loop counter
-    call drawFood
-    call writeScore
     
 
 
 
 delayUntilTick:
-    mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
+    xor ax, ax                  ; 0x00 = reads system tick counter (~18 Hz) into cx and dx
     int 0x1a                    ; call real time clock BIOS Services
-    shr dx, 1                   ; divide by 2 = ~9Hz
     cmp dx, [oldTime]           ; wait for change
     je delayUntilTick           ; jump back up if the time is still the same
     mov [oldTime], dx           ; Save new current time
 
-    mov ah, 0x01                ; check for keypress
+    mov ah, 0x01                ; 0x01 = check for keypress
     int 0x16                    ; calls bios keyboard services
     jnz setDirection            ; jump if there is a key waiting
 returnSetDirection:
@@ -98,11 +96,10 @@ returnSetDirection:
     call eraseSnakeTail
     call printSnakeToScreen
 
-    mov ax, [oldTime]           ; only draw food every 100 ticks
-    mov bx, 100
-    div bx
-    cmp dx, 0
-    jne delayUntilTick
+    mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
+    int 0x1a                    ; call real time clock BIOS Services
+    and dx, 0b0111_1111         ; draw food ever 128 ticks
+    jnz delayUntilTick
     call drawFood
     jmp delayUntilTick          ; loop forever
 
@@ -131,8 +128,8 @@ validKey:
 ; right: 0110 0100  (d)
 ;   if (al AND 0001 0000) XOR (currentDirection AND 0001 0000) is zero, ignore the key
 
-    mov ah, al                  ; AL contains the key that was pressed
-    mov bl, [currentDirection]
+    mov bl, al                  ; AL contains the key that was pressed
+    mov ah, [currentDirection]
     and ah, 0b0001_0000
     and bl, 0b0001_0000
     xor ah, bl
@@ -186,33 +183,33 @@ retryDrawFood:
     ret 
     
 writeScore:
-    mov bx, [length]
-    sub bx, initialLength
-    mov dx, 5
+    mov bx, [length]            ; set BX to length
+    sub bx, initialLength       ; minus the initial length to get the score
+    mov dx, 5                   ; number of characters to print
 
 
 writeScoreLoop:
-    dec dl
-    mov ah, 0x02
-    int 0x10
-    
-    xor dx, dx
-    mov ax, bx
-    mov cx, 10
-    div cx
-    mov bx, ax
-    mov al, dl
-    add al, 0x30                ; 0x30 = "0"
+    dec dx                      ; because position is zero indexed
+    mov ah, 0x02                ; set cursor position to row DH, column DL
+    int 0x10                    ; call bios video services
 
-    mov ah, 0x03
-    int 0x10
-    mov cl, bl
-    mov bl, 7                   ; light grey
-    mov ah, 0x0e
-    int 0x10
-    mov bl, cl
+    xor dx, dx                  ; zero out DX, it is used as the high word in the division
+    mov ax, bx                  ; copy length into AX
+    mov cx, 10                  ; set divisor
+    div cx                      ; quotient in AX, remainder in DX
+    mov bx, ax                  ; copy length / 10 into BX
+    mov al, dl                  ; get the remainder (this is the number we want to print)
 
-    cmp dl, 0
+    mov cl, bl                  ; backup BL to CL
+    mov bl, 7                   ; colour attribute: light grey
+    add al, 0x30                ; 0x30 = "0" to get the ASCII character
+    mov ah, 0x0e                ; TTY mode, white ASCII character in AL
+    int 0x10                    ; call bios video services
+    mov bl, cl                  ; restore BL
+
+    mov ah, 0x03                ; get cursor position, to row DH, column DL
+    int 0x10                    ; call bios video services
+    dec dx                      ; subtract because we auto-advanced on the TTY print
     jnz writeScoreLoop
     ret
 

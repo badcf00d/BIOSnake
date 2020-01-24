@@ -43,6 +43,8 @@ currentDirection: equ 0xfa08
 tailX: equ 0xfa0a
 tailY: equ 0xfa0c
 length: equ 0xfa0e
+lastDirection: equ 0xfa10
+score: equ 0xfa12
 
 
 start:
@@ -53,22 +55,17 @@ start:
     mov ds, ax                  ; goes to data segment 0xa0000
     mov es, ax                  ; goes to 0xfa00 within 0xa0000
 
-    mov al, 20                  ; start x
+    mov al, 100                  ; start x
     mov [tailX], al             ; store tail x
     mov [headX], al             ; store start x
 
-    mov al, 40                  ; start y
-    mov [tailY], al             ; store tail y
-    dec ax                      ; set head back to simplify initSnake
-    mov [headY], al             ; store start y
+    inc word [tailY]            ; increment tail to make initSnake loop simpler
 
     mov al, down                ; start going down
     mov [currentDirection], al  ; store current direction
-    mov al, downBodyColour      ; start at grey
+    mov al, downBodyColour      ; start going down
     mov [currentColour], al     ; store current colour
-    mov cx, initialLength       ; cx is the loop counter
-    mov [length], cx
-    dec cx
+    mov cx, initialLength - 1   ; cx is the loop counter
 initSnake:
     call moveHead
     call printSnakeToScreen     ; draw some initial chunks of the snake
@@ -95,10 +92,12 @@ returnSetDirection:
     call setDiToHead
     call eraseSnakeTail
     call printSnakeToScreen
+    call writeScore
+
 
     mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
     int 0x1a                    ; call real time clock BIOS Services
-    and dx, 0b0111_1111         ; draw food ever 128 ticks
+    and dl, 0b0011_1111         ; draw food ever 64 ticks
     jnz delayUntilTick
     call drawFood
     jmp delayUntilTick          ; loop forever
@@ -109,17 +108,7 @@ returnSetDirection:
 setDirection:
     mov ah, 0x00                ; fetches the keystroke from the keyboard buffer
     int 0x16                    ; call bios keyboard services
-    cmp al, up
-    je validKey
-    cmp al, down
-    je validKey
-    cmp al, left
-    je validKey
-    cmp al, right
-    je validKey
-    jmp returnSetDirection      ; if we get here, it was an invalid key, don't save it
 
-validKey:
 ; we can stop the snake from going back into itself by doing this check
 ;
 ; up:    0111 0111  (w)
@@ -158,17 +147,13 @@ printSnakeToScreen:
 
 
 gameOverManGameOver:
-    mov al, 12               ; red
+    mov al, 12                  ; red
     mov [di], al                ; Write to screen
     jmp $                       ; loop here forever
 
 
 drawFood:
-    mov ah, 0x02                ; reads time from RTC
-    int 0x1a                    ; call real time clock BIOS Services
-    xor ax, dx                  ; xor the low and high bytes of the time
-    xor ax, cx
-    xor ax, 0xd39e              ; xor with a random number
+    mov ax, dx
 retryDrawFood:
     mov bx, 63999               ; dividing here to make sure we're actually on the screen
     div bx                      ; divides AX by BX, puts remainder in DX
@@ -182,11 +167,11 @@ retryDrawFood:
     call setDiToHead            ; set DI back to where it should be
     ret 
     
-writeScore:
-    mov bx, [length]            ; set BX to length
-    sub bx, initialLength       ; minus the initial length to get the score
-    mov dx, 5                   ; number of characters to print
 
+
+writeScore:
+    mov bx, [score]             ; set BX to score
+    mov dx, 5                   ; number of characters to print
 
 writeScoreLoop:
     dec dx                      ; because position is zero indexed
@@ -194,16 +179,16 @@ writeScoreLoop:
     int 0x10                    ; call bios video services
 
     xor dx, dx                  ; zero out DX, it is used as the high word in the division
-    mov ax, bx                  ; copy length into AX
+    mov ax, bx                  ; copy score into AX
     mov cx, 10                  ; set divisor
     div cx                      ; quotient in AX, remainder in DX
-    mov bx, ax                  ; copy length / 10 into BX
+    mov bx, ax                  ; copy score / 10 into BX
     mov al, dl                  ; get the remainder (this is the number we want to print)
 
     mov cl, bl                  ; backup BL to CL
     mov bl, 7                   ; colour attribute: light grey
     add al, 0x30                ; 0x30 = "0" to get the ASCII character
-    mov ah, 0x0e                ; TTY mode, white ASCII character in AL
+    mov ah, 0x0e                ; TTY mode, write ASCII character in AL
     int 0x10                    ; call bios video services
     mov bl, cl                  ; restore BL
 
@@ -213,9 +198,10 @@ writeScoreLoop:
     jnz writeScoreLoop
     ret
 
+
+
 ateFood:
-    inc word [length]
-    call writeScore
+    inc word [score]
     ret
 
 eraseSnakeTail:
@@ -282,17 +268,22 @@ moveTailRight:
 moveHead:
     mov bx, [headX]             ; load the head X in bx (needs 16 bits)
     mov dl, [headY]             ; load the head Y in dl (only needs 8 bits)
-    mov al, [currentDirection]
-    cmp al, up
+    mov ah, [currentDirection]
+retryMoveHead:
+    cmp ah, up
     je moveHeadUp
-    cmp al, down
+    cmp ah, down
     je moveHeadDown
-    cmp al, left
+    cmp ah, left
     je moveHeadLeft
-    cmp al, right
+    cmp ah, right
     je moveHeadRight
+    
+    mov ah, [lastDirection]
+    jmp retryMoveHead
 
 saveHeadMove:
+    mov [lastDirection], ah
     mov [headX], bx             ; store the new head X
     mov [headY], dl             ; store the new head Y
     ret
@@ -309,9 +300,6 @@ moveHeadUp:
 moveHeadDown:
     mov al, downBodyColour
     inc dx                      ; saves a byte by incrementing the whole register
-
-; This is 0x1b6, we need to jump over from 0x1b8 to 0x1ce to avoid partition 1 in the MBR
-
     cmp dl, screenHeight + 1
     jne saveHeadMove
     mov dl, 0
@@ -343,5 +331,11 @@ setDiToHead:
 
 
 
+; If you want to fill the whole 512 byte sector you can enable this
+;%define fill_sector
+
+
+%ifdef fill_sector
 times 510-($-$$) db 0
 dw 0xaa55                       ; x86 is little endian, so this is actually 0x55, 0xaa
+%endif

@@ -329,7 +329,7 @@ setDiToHead:
 
 
 ; If you want to fill the whole 512 byte sector you can enable this
-%define fill_sector
+;%define fill_sector
 
 
 %ifdef fill_sector

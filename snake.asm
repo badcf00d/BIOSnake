@@ -92,7 +92,34 @@ returnSetDirection:
     call setDiToHead
     call eraseSnakeTail
     call printSnakeToScreen
-    call writeScore
+
+
+    mov bx, [score]             ; set BX to score
+    mov dx, 5                   ; number of characters to print
+
+writeScoreLoop:
+    dec dx                      ; because position is zero indexed
+    mov ah, 0x02                ; set cursor position to row DH, column DL
+    int 0x10                    ; call bios video services
+
+    xor dx, dx                  ; zero out DX, it is used as the high word in the division
+    mov ax, bx                  ; copy score into AX
+    mov cx, 10                  ; set divisor
+    div cx                      ; quotient in AX, remainder in DX
+    mov bx, ax                  ; copy score / 10 into BX
+    mov al, dl                  ; get the remainder (this is the number we want to print)
+
+    mov cl, bl                  ; backup BL to CL
+    mov bl, rightBodyColour     ; foreground colour, gave over if you hit the score
+    add al, 0x30                ; 0x30 = "0" to get the ASCII character
+    mov ah, 0x0e                ; TTY mode, write ASCII character in AL
+    int 0x10                    ; call bios video services
+    mov bl, cl                  ; restore BL
+
+    mov ah, 0x03                ; get cursor position, to row DH, column DL
+    int 0x10                    ; call bios video services
+    dec dx                      ; subtract because we auto-advanced on the TTY print
+    jnz writeScoreLoop
 
 
     mov ah, 0x00                ; reads system tick counter (~18 Hz) into cx and dx
@@ -167,36 +194,6 @@ retryDrawFood:
     call setDiToHead            ; set DI back to where it should be
     ret 
     
-
-
-writeScore:
-    mov bx, [score]             ; set BX to score
-    mov dx, 5                   ; number of characters to print
-
-writeScoreLoop:
-    dec dx                      ; because position is zero indexed
-    mov ah, 0x02                ; set cursor position to row DH, column DL
-    int 0x10                    ; call bios video services
-
-    xor dx, dx                  ; zero out DX, it is used as the high word in the division
-    mov ax, bx                  ; copy score into AX
-    mov cx, 10                  ; set divisor
-    div cx                      ; quotient in AX, remainder in DX
-    mov bx, ax                  ; copy score / 10 into BX
-    mov al, dl                  ; get the remainder (this is the number we want to print)
-
-    mov cl, bl                  ; backup BL to CL
-    mov bl, 7                   ; colour attribute: light grey
-    add al, 0x30                ; 0x30 = "0" to get the ASCII character
-    mov ah, 0x0e                ; TTY mode, write ASCII character in AL
-    int 0x10                    ; call bios video services
-    mov bl, cl                  ; restore BL
-
-    mov ah, 0x03                ; get cursor position, to row DH, column DL
-    int 0x10                    ; call bios video services
-    dec dx                      ; subtract because we auto-advanced on the TTY print
-    jnz writeScoreLoop
-    ret
 
 
 
@@ -332,7 +329,7 @@ setDiToHead:
 
 
 ; If you want to fill the whole 512 byte sector you can enable this
-;%define fill_sector
+%define fill_sector
 
 
 %ifdef fill_sector

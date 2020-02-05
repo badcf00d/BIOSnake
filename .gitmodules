@@ -1,0 +1,3 @@
+[submodule "py-boot-sector"]
+	path = py-boot-sector
+	url = https://github.com/badcf00d/py-boot-sector

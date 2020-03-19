@@ -4,7 +4,7 @@ A boot sector snake game written in x86 NASM assembly for BIOS, it is smaller th
 
 #### How to use:
   - Clone the repository then use the python script from `py-boot-sector` to flash `snake.img` onto your drive, and boot to it from the BIOS.
-  - Or if you prefer, use qemu to boot `snake.img` with `qemu-system-x86_64 -drive file=snake.img,format=raw`.
+  - Or if you prefer, use qemu to boot `snake-qemu.img` with `qemu-system-x86_64 -drive file=snake-qemu.img,format=raw`.
 
 ##### Known ~~Bugs~~ *Features*:
   - Food can spawn inside the digits of the score
